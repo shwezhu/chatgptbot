@@ -14,7 +14,7 @@ func main() {
 		panic("failed to connect database")
 	}
 
-	http.Handle("/", handler.IndexHandler(db))
+	http.Handle("/", handler.IndexHandler())
 	http.Handle("/login", handler.LoginHandler(db))
 	http.Handle("/register", handler.RegisterHandler(db))
 	log.Fatal(http.ListenAndServe(":8080", nil))
