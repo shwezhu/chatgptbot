@@ -3,11 +3,29 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	. "gptbot/model"
 	"net/http"
+	"os"
 )
+
+/*type appError struct {
+	Error   error
+	Message string
+	Code    int
+}
+
+type appHandler func(http.ResponseWriter, *http.Request) *appError
+
+func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+}*/
+
+// https://github.com/gorilla/sessions
+// https://github.com/karankumarshreds/GoAuthentication/blob/master/readme.md
+var cookieStore = sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
 
 // IndexHandler Function name starts with an uppercase letter: Public function
 // And name starts with a lowercase letter: Private function
@@ -37,17 +55,23 @@ func LoginHandler(db *gorm.DB) http.Handler {
 		var err error
 		// no such user
 		if userPtr, err = findUserByUserName(db, username); err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "username not found", http.StatusUnauthorized)
 			return
 		}
 
-		// password is nor correct
+		// password is not correct
 		if !checkPasswordHash(password, userPtr.Password) {
-
+			http.Error(w, "password is not correct", http.StatusUnauthorized)
+			return
 		}
 
 		// login successfully
-
+		if session := createSession(w, r); session != nil {
+			_, err = fmt.Fprint(w, "login successfully!")
+			if err != nil {
+				panic(err)
+			}
+		}
 	})
 }
 
@@ -91,6 +115,7 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 				if err != nil {
 					panic(err)
 				}
+				return
 			} else { // other error
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				panic(err)
@@ -103,11 +128,33 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 	})
 }
 
+func createSession(w http.ResponseWriter, r *http.Request) *sessions.Session {
+	// generate new session-id, if not exist
+	if session, err := cookieStore.Get(r, "session-id"); err != nil {
+		http.Error(w, fmt.Sprintf("Cannot create session: %v", err.Error()), http.StatusInternalServerError)
+		panic(err.Error())
+		return nil
+	} else {
+		// MaxAge in seconds
+		session.Options.MaxAge = 5 * 60
+		session.Values["authenticated"] = true
+		if err = session.Save(r, w); err != nil {
+			http.Error(w, fmt.Sprintf("Cannot create session: %v", err.Error()), http.StatusInternalServerError)
+			panic(err.Error())
+			return nil
+		}
+		return session
+	}
+}
+
 func findUserByUserName(db *gorm.DB, username string) (*User, error) {
 	user := User{}
 	var err error
 	// if user is found, set that object in &user
-	if err = db.First(&user, "username = ?", username).Error; err == nil {
+	// Avoid the ErrRecordNotFound error automatically printed on terminal,
+	// so don't use db.First(&user, "username = ?", username).Error;
+	// https://gorm.io/docs/query.html
+	if err = db.Limit(1).Find(&user, "username = ?", username).Error; err == nil {
 		return &user, nil
 	}
 
