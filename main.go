@@ -16,6 +16,7 @@ func main() {
 
 	http.Handle("/", handler.IndexHandler())
 	http.Handle("/login", handler.LoginHandler(db))
+	http.Handle("/logout", handler.LogoutHandler())
 	http.Handle("/register", handler.RegisterHandler(db))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
