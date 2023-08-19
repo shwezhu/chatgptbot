@@ -1,35 +1,32 @@
 package handler
 
 import (
+	"encoding/gob"
+	"errors"
 	"fmt"
+	"github.com/gorilla/sessions"
+	"github.com/sashabaranov/go-openai"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
 	. "gptbot/model"
 	"log"
 	"net/http"
-	"os"
 )
 
-// https://github.com/gorilla/sessions
-// https://github.com/karankumarshreds/GoAuthentication/blob/master/readme.md
-var store, _ = redistore.NewRediStore(10, "tcp", ":6379", "", []byte(os.Getenv("SESSION_KEY")))
-
-// IndexHandler Function name starts with an uppercase letter: Public function
-// And name starts with a lowercase letter: Private function
 func IndexHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintf(w, "Hi there")
+		_, err := fmt.Fprintf(w, "hi there")
 		if err != nil {
 			panic(err)
 		}
 	})
 }
 
-func LoginHandler(db *gorm.DB) http.Handler {
+func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method Not Supported", http.StatusMethodNotAllowed)
+			http.Error(w, "method not supported", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -47,6 +44,7 @@ func LoginHandler(db *gorm.DB) http.Handler {
 			log.Println(err)
 			return
 		}
+
 		if user == (User{}) {
 			http.Error(w, "no such user, please register", http.StatusUnauthorized)
 			return
@@ -58,10 +56,17 @@ func LoginHandler(db *gorm.DB) http.Handler {
 			return
 		}
 
-		if err = createSession(w, r, user.Balance); err != nil {
+		session, err := createSession(r, store)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Println(err)
 			return
+		}
+
+		session.Values["username"] = (*userInfo)["username"]
+		if err = session.Save(r, w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Println(err)
 		}
 
 		if _, err = fmt.Fprint(w, "login successfully"); err != nil {
@@ -71,25 +76,32 @@ func LoginHandler(db *gorm.DB) http.Handler {
 	})
 }
 
-func LogoutHandler() http.Handler {
+func LogoutHandler(store *redistore.RediStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get registers and returns a session for the given name and session store.
-		session, _ := store.Get(r, "session_id")
+		session, err := store.Get(r, "session_id")
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to logout: %v", err), http.StatusInternalServerError)
+			log.Printf("failed to logout: %v", err)
+			return
+		}
+
 		if session.IsNew {
 			if _, err := fmt.Fprint(w, "you have not logged in yet"); err != nil {
 				log.Println(err)
 			}
 			return
 		}
+
 		// if you want to delete session: https://github.com/gorilla/sessions/issues/160
 		session.Values["authenticated"] = false
-		if err := session.Save(r, w); err != nil {
+		if err = session.Save(r, w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Println(err)
 			return
 		}
 
-		if _, err := fmt.Fprint(w, "logout successfully"); err != nil {
+		if _, err = fmt.Fprint(w, "logout successfully"); err != nil {
 			log.Println(err)
 			return
 		}
@@ -99,7 +111,7 @@ func LogoutHandler() http.Handler {
 func RegisterHandler(db *gorm.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method Not Supported", http.StatusMethodNotAllowed)
+			http.Error(w, "method not supported", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -151,33 +163,37 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 	})
 }
 
-func createSession(w http.ResponseWriter, r *http.Request, tokens uint) error {
+func createSession(r *http.Request, store *redistore.RediStore) (*sessions.Session, error) {
 	session, err := store.New(r, "session_id")
 	if err != nil {
-		return fmt.Errorf("cannot create session: %w", err)
+		return nil, fmt.Errorf("failedto create session: %v", err)
 	}
 
 	// MaxAge in seconds
-	session.Options.MaxAge = 5 * 60
+	session.Options.MaxAge = 24 * 3600
 	session.Values["authenticated"] = true
-	session.Values["tokens"] = tokens
-	if err = session.Save(r, w); err != nil {
-		return fmt.Errorf("cannot save session: %w", err)
-	}
+	// if don't register, will have error:
+	// gob: type not registered for interface: []openai.ChatCompletionMessage
+	gob.Register([]openai.ChatCompletionMessage{})
+	session.Values["messages"] = []openai.ChatCompletionMessage{}
 
-	return nil
+	// session just need save once, otherwise client will receive two cookie
+	// we will save session in LoginHandler function
+	// err = session.Save(r, w)
+
+	return session, nil
 }
 
 func parseUsernamePassword(r *http.Request) (*map[string]string, error) {
 	userInfo := make(map[string]string)
 	if err := r.ParseForm(); err != nil {
-		return nil, fmt.Errorf("falied to parse form: %w", err)
+		return nil, fmt.Errorf("failed to parse username and password: %v", err)
 	}
 
 	userInfo["username"] = r.Form.Get("username")
 	userInfo["password"] = r.Form.Get("password")
 	if userInfo["username"] == "" || userInfo["password"] == "" {
-		return nil, fmt.Errorf("no username or password")
+		return nil, errors.New("failed to parse username and password: no username or password")
 	}
 
 	return &userInfo, nil
