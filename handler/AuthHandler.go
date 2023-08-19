@@ -14,12 +14,21 @@ import (
 	"net/http"
 )
 
-func IndexHandler() http.Handler {
+func IndexHandler(store *redistore.RediStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintf(w, "hi there")
-		if err != nil {
-			panic(err)
+		session, _ := store.Get(r, "session_id")
+		if session.IsNew {
+			session.Options.MaxAge = 30
+			session.Values["authenticated"] = true
+			session.Values["visit_time"] = 1
+			_, _ = fmt.Fprintf(w, "welcome: %v", session.ID)
+			_ = session.Save(r, w)
+			return
 		}
+
+		session.Values["visit_time"] = session.Values["visit_time"].(int) + 1
+		_ = session.Save(r, w)
+		_, _ = fmt.Fprintf(w, "visit time: %v", session.Values["visit_time"])
 	})
 }
 
@@ -56,8 +65,13 @@ func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		session, err := createSession(r, store)
-		if err != nil {
+		session, err := store.Get(r, "session_id")
+		if !session.IsNew {
+			_, err = fmt.Fprint(w, "you have logged in already")
+			return
+		}
+
+		if err = initSession(session); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Println(err)
 			return
@@ -163,12 +177,7 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 	})
 }
 
-func createSession(r *http.Request, store *redistore.RediStore) (*sessions.Session, error) {
-	session, err := store.New(r, "session_id")
-	if err != nil {
-		return nil, fmt.Errorf("failedto create session: %v", err)
-	}
-
+func initSession(session *sessions.Session) error {
 	// MaxAge in seconds
 	session.Options.MaxAge = 24 * 3600
 	session.Values["authenticated"] = true
@@ -181,7 +190,7 @@ func createSession(r *http.Request, store *redistore.RediStore) (*sessions.Sessi
 	// we will save session in LoginHandler function
 	// err = session.Save(r, w)
 
-	return session, nil
+	return nil
 }
 
 func parseUsernamePassword(r *http.Request) (*map[string]string, error) {

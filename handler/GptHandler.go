@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gorilla/sessions"
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
@@ -23,17 +24,25 @@ func Gpt3Dot5Handler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		// 需要对 error 分类
-		if err := updateMessage(w, r, store); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		session, err := store.Get(r, "session_id")
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to get sessions: %v", err), http.StatusInternalServerError)
+			log.Printf("failed to get sessions: %v", err)
 			return
 		}
 
-		session, err := store.Get(r, "session_id")
-		if err != nil {
-			http.Error(w, fmt.Sprintf("cannot get session: %v", err), http.StatusInternalServerError)
+		if session.IsNew || session.Values["authenticated"] == false {
+			http.Error(w, "you have not logged in yet", http.StatusUnauthorized)
 			return
 		}
+
+		message, err := parseMessage(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		updateMessage(session, message)
 
 		messages := session.Values["messages"].([]openai.ChatCompletionMessage)
 		balance, err := getTokens(db, session.Values["username"].(string))
@@ -43,8 +52,8 @@ func Gpt3Dot5Handler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		messageTokens := calculateTokens(&messages)
-		if balance <= messageTokens {
+		historyMessageLength := calculateLength(&messages)
+		if balance <= historyMessageLength {
 			if _, err = fmt.Fprint(w, "you've reached limits"); err != nil {
 				log.Println(err)
 				return
@@ -57,7 +66,7 @@ func Gpt3Dot5Handler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			openai.ChatCompletionRequest{
 				Model:     openai.GPT3Dot5Turbo,
 				Messages:  messages,
-				MaxTokens: balance - messageTokens,
+				MaxTokens: balance - historyMessageLength,
 			})
 
 		if err != nil {
@@ -71,7 +80,15 @@ func Gpt3Dot5Handler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		balance = balance - messageTokens - len(resp.Choices[0].Message.Content)
+		updateMessage(session, &resp.Choices[0].Message.Content)
+		if err = session.Save(r, w); err != nil {
+			http.Error(w, fmt.Sprintf("failed to save session: %v", err), http.StatusUnauthorized)
+			log.Printf("failed to save session: %v", err)
+			return
+		}
+
+		// 1 token ~= 4 chars in English
+		balance = balance - (historyMessageLength-len(resp.Choices[0].Message.Content))/4
 		err = updateTokens(db, session.Values["username"].(string), balance)
 		if err != nil {
 			log.Println(err)
@@ -80,7 +97,31 @@ func Gpt3Dot5Handler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 	})
 }
 
-func calculateTokens(messages *[]openai.ChatCompletionMessage) int {
+func parseMessage(r *http.Request) (*string, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, fmt.Errorf("failed to parse message: %v", err)
+	}
+
+	message := r.Form.Get("message")
+	if message == "" {
+		return nil, errors.New("failed to parse message: no message provided")
+	}
+
+	return &message, nil
+}
+
+func updateMessage(session *sessions.Session, message *string) {
+	// Type assertions: https://go.dev/tour/methods/15
+	session.Values["messages"] = append(
+		session.Values["messages"].([]openai.ChatCompletionMessage),
+		openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: *message,
+		},
+	)
+}
+
+func calculateLength(messages *[]openai.ChatCompletionMessage) int {
 	length := 0
 	for _, v := range *messages {
 		length += len(v.Content)
@@ -113,48 +154,4 @@ func updateTokens(db *gorm.DB, username string, tokens int) error {
 	}
 
 	return nil
-}
-
-func updateMessage(w http.ResponseWriter, r *http.Request, store *redistore.RediStore) error {
-	session, err := store.Get(r, "session_id")
-	if err != nil {
-		return fmt.Errorf("cannot update message: %v", err)
-	}
-
-	if session.IsNew || session.Values["authenticated"] == false {
-		return errors.New("you have not logged in yet")
-	}
-
-	message, err := parseMessage(r)
-	if err != nil {
-		return fmt.Errorf("failed to update message: %v", err)
-	}
-
-	// Type assertions: https://go.dev/tour/methods/15
-	session.Values["messages"] = append(
-		session.Values["messages"].([]openai.ChatCompletionMessage),
-		openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: *message,
-		},
-	)
-
-	if err = session.Save(r, w); err != nil {
-		return fmt.Errorf("cannot update message: %v", err)
-	}
-
-	return nil
-}
-
-func parseMessage(r *http.Request) (*string, error) {
-	if err := r.ParseForm(); err != nil {
-		return nil, fmt.Errorf("failed to parse message: %v", err)
-	}
-
-	message := r.Form.Get("message")
-	if message == "" {
-		return nil, errors.New("failed to parse message: no message provided")
-	}
-
-	return &message, nil
 }
