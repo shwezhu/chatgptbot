@@ -24,6 +24,7 @@ func main() {
 		log.Fatal("failed to create Redis store")
 	}
 
+	http.HandleFunc("/favicon.ico", handler.DoNothing)
 	http.Handle("/", handler.IndexHandler(store))
 	http.Handle("/login", handler.LoginHandler(db, store))
 	http.Handle("/logout", handler.LogoutHandler(store))

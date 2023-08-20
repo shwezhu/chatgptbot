@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/gorilla/sessions"
-	"github.com/sashabaranov/go-openai"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
@@ -14,21 +12,30 @@ import (
 	"net/http"
 )
 
+// otherwise, handler for "/" will be called twice, when you access localhost:8080/
+// one for "/", another for "/favicon.ico"
+// https://stackoverflow.com/a/57682227/16317008
+func DoNothing(w http.ResponseWriter, r *http.Request) {}
+
 func IndexHandler(store *redistore.RediStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// do not register []openai.ChatCompletionMessage or just ChatHistoryList
+		// register pointer type
+		// otherwise, the session in redis won't be deleted after expires
+		// this probably because the implementation of gorilla/session
+		// register before Get, otherwise, the IsNew is true
+		// gob.Register([]openai.ChatCompletionMessage{})
 		session, _ := store.Get(r, "session_id")
+		name := session.Values["username"]
 		if session.IsNew {
-			session.Options.MaxAge = 30
-			session.Values["authenticated"] = true
-			session.Values["visit_time"] = 1
-			_, _ = fmt.Fprintf(w, "welcome: %v", session.ID)
+			_ = initSession(session)
+			session.Values["username"] = "jack"
 			_ = session.Save(r, w)
+			_, _ = fmt.Fprint(w, "login successfully")
 			return
 		}
 
-		session.Values["visit_time"] = session.Values["visit_time"].(int) + 1
-		_ = session.Save(r, w)
-		_, _ = fmt.Fprintf(w, "visit time: %v", session.Values["visit_time"])
+		_, _ = fmt.Fprint(w, fmt.Sprintf("hi: %v", name))
 	})
 }
 
@@ -179,12 +186,9 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 
 func initSession(session *sessions.Session) error {
 	// MaxAge in seconds
-	session.Options.MaxAge = 24 * 3600
+	session.Options.MaxAge = 60
 	session.Values["authenticated"] = true
-	// if don't register, will have error:
-	// gob: type not registered for interface: []openai.ChatCompletionMessage
-	gob.Register([]openai.ChatCompletionMessage{})
-	session.Values["messages"] = []openai.ChatCompletionMessage{}
+	session.Values["messages"] = []byte{}
 
 	// session just need save once, otherwise client will receive two cookie
 	// we will save session in LoginHandler function
