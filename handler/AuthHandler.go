@@ -34,7 +34,8 @@ func IndexHandler(store *redistore.RediStore) http.Handler {
 			_, _ = fmt.Fprint(w, "login successfully")
 			return
 		}
-
+		session.Values["username"] = "json"
+		_ = session.Save(r, w)
 		_, _ = fmt.Fprint(w, fmt.Sprintf("hi: %v", name))
 	})
 }
@@ -186,7 +187,7 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 
 func initSession(session *sessions.Session) error {
 	// MaxAge in seconds
-	session.Options.MaxAge = 60
+	session.Options.MaxAge = 24 * 3600
 	session.Values["authenticated"] = true
 	session.Values["messages"] = []byte{}
 

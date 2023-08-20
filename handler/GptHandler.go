@@ -151,8 +151,9 @@ func saveSessionMessages(w http.ResponseWriter, r *http.Request, session *sessio
 	}
 
 	session.Values["messages"] = data
-	session.Options.MaxAge = 60
-
+	// set MaxAge whenever you call session.Save(r, w)
+	// otherwise, MaxAge will be set back to default value
+	session.Options.MaxAge = 24 * 3600
 	if err = session.Save(r, w); err != nil {
 		return fmt.Errorf("failed to save session messages: %v", err)
 	}
