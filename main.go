@@ -24,11 +24,11 @@ func main() {
 		log.Fatal("failed to create Redis store")
 	}
 
+	http.HandleFunc("/", handler.IndexHandler)
 	http.HandleFunc("/favicon.ico", handler.DoNothing)
-	http.Handle("/", handler.IndexHandler(store))
 	http.Handle("/login", handler.LoginHandler(db, store))
 	http.Handle("/logout", handler.LogoutHandler(store))
 	http.Handle("/register", handler.RegisterHandler(db))
-	http.Handle("/chat/gpt-3", handler.Gpt3Dot5Handler(db, store))
+	http.Handle("/chat/gpt-turbo", handler.Gpt3Dot5Handler(db, store))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

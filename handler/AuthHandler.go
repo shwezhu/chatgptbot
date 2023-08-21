@@ -12,32 +12,13 @@ import (
 	"net/http"
 )
 
-// otherwise, handler for "/" will be called twice, when you access localhost:8080/
+// DoNothing otherwise, handler for "/" will be "called" twice, when browser access localhost:8080/
 // one for "/", another for "/favicon.ico"
 // https://stackoverflow.com/a/57682227/16317008
-func DoNothing(w http.ResponseWriter, r *http.Request) {}
+func DoNothing(_ http.ResponseWriter, _ *http.Request) {}
 
-func IndexHandler(store *redistore.RediStore) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// do not register []openai.ChatCompletionMessage or just ChatHistoryList
-		// register pointer type
-		// otherwise, the session in redis won't be deleted after expires
-		// this probably because the implementation of gorilla/session
-		// register before Get, otherwise, the IsNew is true
-		// gob.Register([]openai.ChatCompletionMessage{})
-		session, _ := store.Get(r, "session_id")
-		name := session.Values["username"]
-		if session.IsNew {
-			_ = initSession(session)
-			session.Values["username"] = "jack"
-			_ = session.Save(r, w)
-			_, _ = fmt.Fprint(w, "login successfully")
-			return
-		}
-		session.Values["username"] = "json"
-		_ = session.Save(r, w)
-		_, _ = fmt.Fprint(w, fmt.Sprintf("hi: %v", name))
-	})
+func IndexHandler(w http.ResponseWriter, _ *http.Request) {
+	_, _ = fmt.Fprint(w, "hello there")
 }
 
 func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
@@ -115,7 +96,7 @@ func LogoutHandler(store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		// if you want to delete session: https://github.com/gorilla/sessions/issues/160
+		// delete session: https://github.com/gorilla/sessions/issues/160
 		session.Values["authenticated"] = false
 		if err = session.Save(r, w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -186,15 +167,11 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 }
 
 func initSession(session *sessions.Session) error {
+	// session.Options.Path == "/"
 	// MaxAge in seconds
 	session.Options.MaxAge = 24 * 3600
 	session.Values["authenticated"] = true
 	session.Values["messages"] = []byte{}
-
-	// session just need save once, otherwise client will receive two cookie
-	// we will save session in LoginHandler function
-	// err = session.Save(r, w)
-
 	return nil
 }
 

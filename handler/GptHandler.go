@@ -184,6 +184,7 @@ func calculateMessageLength(messages []openai.ChatCompletionMessage) int {
 
 func getBalance(db *gorm.DB, username string) (int, error) {
 	user := User{}
+
 	// if no user found, return NoRecordFound error
 	err := db.First(&user, "username = ?", username).Error
 	if err != nil {
@@ -195,6 +196,7 @@ func getBalance(db *gorm.DB, username string) (int, error) {
 
 func updateTokens(db *gorm.DB, username string, tokens int) error {
 	user := User{}
+
 	// if no user found, return NoRecordFound error
 	err := db.First(&user, "username = ?", username).Error
 	if err != nil {
