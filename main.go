@@ -4,7 +4,6 @@ import (
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gptbot/handler"
 	"log"
 	"net/http"
 	"os"
@@ -24,11 +23,11 @@ func main() {
 		log.Fatal("failed to create Redis store")
 	}
 
-	http.HandleFunc("/", handler.IndexHandler)
-	http.HandleFunc("/favicon.ico", handler.DoNothing)
-	http.Handle("/login", handler.LoginHandler(db, store))
-	http.Handle("/logout", handler.LogoutHandler(store))
-	http.Handle("/register", handler.RegisterHandler(db))
-	http.Handle("/chat/gpt-turbo", handler.Gpt3Dot5Handler(db, store))
+	http.HandleFunc("/", IndexHandler)
+	http.HandleFunc("/favicon.ico", DoNothing)
+	http.Handle("/login", LoginHandler(db, store))
+	http.Handle("/logout", LogoutHandler(store))
+	http.Handle("/register", RegisterHandler(db))
+	http.Handle("/chat/gpt-turbo", Gpt3Dot5Handler(db, store))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

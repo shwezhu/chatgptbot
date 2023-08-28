@@ -1,4 +1,4 @@
-package model
+package main
 
 // User Declaring Models: https://gorm.io/docs/models.html
 // balance field doesn't belong to User

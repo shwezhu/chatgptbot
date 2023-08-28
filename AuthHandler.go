@@ -1,4 +1,4 @@
-package handler
+package main
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
-	. "gptbot/model"
 	"log"
 	"net/http"
 )

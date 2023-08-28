@@ -1,4 +1,4 @@
-package handler
+package main
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
-	. "gptbot/model"
 	"log"
 	"net/http"
 	"os"
