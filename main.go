@@ -15,8 +15,6 @@ func main() {
 		log.Fatal("failed to connect database")
 	}
 
-	// https://github.com/gorilla/sessions
-	// https://github.com/karankumarshreds/GoAuthentication/blob/master/readme.md
 	var store *redistore.RediStore
 	store, err = redistore.NewRediStore(10, "tcp", ":6379", "", []byte(os.Getenv("SESSION_KEY")))
 	if err != nil {
