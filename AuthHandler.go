@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/gorilla/sessions"
-	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/gorm"
 	"log"
@@ -23,10 +21,9 @@ func IndexHandler(w http.ResponseWriter, _ *http.Request) {
 func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+			http.Error(w, "method is not supported", http.StatusMethodNotAllowed)
 			return
 		}
-
 		userInfo, err := parseUsernamePassword(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -48,7 +45,7 @@ func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 		}
 
 		// password is not correct
-		if !checkPasswordHash((*userInfo)["password"], user.Password) {
+		if !comparePasswordHash(user.Password, (*userInfo)["password"]) {
 			http.Error(w, "password is not correct", http.StatusUnauthorized)
 			return
 		}
@@ -59,11 +56,7 @@ func LoginHandler(db *gorm.DB, store *redistore.RediStore) http.Handler {
 			return
 		}
 
-		if err = initSession(session); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Println(err)
-			return
-		}
+		initSession(session)
 
 		session.Values["username"] = (*userInfo)["username"]
 		if err = session.Save(r, w); err != nil {
@@ -165,15 +158,6 @@ func RegisterHandler(db *gorm.DB) http.Handler {
 	})
 }
 
-func initSession(session *sessions.Session) error {
-	// session.Options.Path == "/"
-	// MaxAge in seconds
-	session.Options.MaxAge = 24 * 3600
-	session.Values["authenticated"] = true
-	session.Values["messages"] = []byte{}
-	return nil
-}
-
 func parseUsernamePassword(r *http.Request) (*map[string]string, error) {
 	userInfo := make(map[string]string)
 	if err := r.ParseForm(); err != nil {
@@ -187,16 +171,4 @@ func parseUsernamePassword(r *http.Request) (*map[string]string, error) {
 	}
 
 	return &userInfo, nil
-}
-
-// https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-// https://pkg.go.dev/golang.org/x/crypto/bcrypt
-func hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 10)
-	return string(bytes), err
-}
-
-func checkPasswordHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
 }
