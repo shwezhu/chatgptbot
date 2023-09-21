@@ -57,7 +57,6 @@ func (s *server) handleGpt3Dot5Turbo(w http.ResponseWriter, r *http.Request,
 			Role:    openai.ChatMessageRoleUser,
 			Content: resp.Choices[0].Message.Content,
 		})
-	fmt.Println(messages)
 	err = saveChatHistory(w, r, session, messages)
 	if err != nil {
 		log.Println(err)
