@@ -24,4 +24,3 @@ $ curl localhost:8080/chat/gpt-turbo -d "message=what's your name" --cookie "ses
 - Just use cookie is not safe, if someone gets the cookie of a user he/her may send authenticated request
 - User that has logged in, but send request without cookie, the server will create a new session for this connection
 - Encoding messages in session can use gob for better performance
-- 
