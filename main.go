@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/sashabaranov/go-openai"
 	"gopkg.in/boj/redistore.v1"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -14,18 +15,11 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to connect database")
 	}
-
-	var store *redistore.RediStore
-	store, err = redistore.NewRediStore(10, "tcp", ":6379", "", []byte(os.Getenv("SESSION_KEY")))
+	store, err := redistore.NewRediStore(10, "tcp", ":6379", "", []byte(os.Getenv("SESSION_KEY")))
 	if err != nil {
 		log.Fatal("failed to create Redis store")
 	}
-
-	http.HandleFunc("/", IndexHandler)
-	http.HandleFunc("/favicon.ico", DoNothing)
-	http.Handle("/login", LoginHandler(db, store))
-	http.Handle("/logout", LogoutHandler(store))
-	http.Handle("/register", RegisterHandler(db))
-	http.Handle("/chat/gpt-turbo", Gpt3Dot5Handler(db, store))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	s := newServer(db, store, client)
+	log.Fatal(http.ListenAndServe(":8080", s))
 }
