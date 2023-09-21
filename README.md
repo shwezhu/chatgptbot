@@ -16,7 +16,7 @@ $ curl localhost:8080/login -d "username=david&password=778899a" -v
 # logout
 $ curl localhost:8080/logout --cookie "session_id=your_session_id" -v
 # chat with chat gpt
-$ curl localhost:8080/chat/gpt-turbo -d "message=what's your name" --cookie "session_id=your_session_id"
+$ curl localhost:8080/chat/gpt-3-turbo -d "message=what's your name" --cookie "session_id=your_session_id"
 ```
 
 ## issues
