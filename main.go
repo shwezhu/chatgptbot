@@ -20,6 +20,9 @@ func main() {
 		log.Fatal("failed to create Redis store")
 	}
 	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-	s := newServer(db, store, client)
+	s := newServer()
+	s.db = db
+	s.store = store
+	s.client = client
 	log.Fatal(http.ListenAndServe(":8080", s))
 }

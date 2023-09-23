@@ -11,12 +11,9 @@ import (
 	"net/http"
 )
 
-func newServer(db *gorm.DB, store *redistore.RediStore,
-	client *openai.Client) *server {
+// Don't set dependencies here, for set dependencies later for easy test.
+func newServer() *server {
 	s := &server{
-		db:     db,
-		store:  store,
-		client: client,
 		router: http.NewServeMux(),
 	}
 	s.routes()
