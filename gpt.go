@@ -15,6 +15,10 @@ func (s *server) handleGpt3Dot5Turbo(w http.ResponseWriter, r *http.Request,
 	session *sessions.Session) {
 	// Combine message from request and history message into a slice for later use.
 	messages, err := formatMessages(r, session)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	// Get balance tokens of the user.
 	balance, err := s.getUserTokens(session.Values["username"].(string))
 	if err != nil {
