@@ -1,8 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/gorilla/sessions"
@@ -128,9 +129,11 @@ func getHistoryMessages(session *sessions.Session) ([]openai.ChatCompletionMessa
 	if len(session.Values["messages"].([]byte)) == 0 {
 		return history, nil
 	}
-	// Decode history messages stored in session.
-	err := json.Unmarshal(session.Values["messages"].([]byte), &history)
-	if err != nil {
+	// There is message, decode message
+	gob.Register([]openai.ChatCompletionMessage{})
+	buf := bytes.NewBuffer(session.Values["messages"].([]byte))
+	dec := gob.NewDecoder(buf)
+	if err := dec.Decode(&history); err != nil {
 		return nil, fmt.Errorf("failed to get history messages: %v", err)
 	}
 	return history, nil
@@ -161,16 +164,18 @@ func calculateTokens(messages []openai.ChatCompletionMessage) int {
 // saveChatHistory saves chat history into session.
 func saveChatHistory(w http.ResponseWriter, r *http.Request,
 	session *sessions.Session, chatHistory []openai.ChatCompletionMessage) error {
-	data, err := json.Marshal(chatHistory)
-	if err != nil {
+	gob.Register([]openai.ChatCompletionMessage{})
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(chatHistory); err != nil {
 		return fmt.Errorf("failed to save session messages: %v", err)
 	}
-	session.Values["messages"] = data
+	session.Values["messages"] = buf.Bytes()
 	// set MaxAge whenever before you call session.Save(r, w)
 	// otherwise, MaxAge will be set back to default value.
 	// this is a bug of gorilla/session
 	session.Options.MaxAge = 24 * 3600
-	if err = session.Save(r, w); err != nil {
+	if err := session.Save(r, w); err != nil {
 		return fmt.Errorf("failed to save session messages: %v", err)
 	}
 	return nil
