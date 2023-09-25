@@ -21,6 +21,7 @@ func TestHandleRegister(t *testing.T) {
 		param  string
 		expect string
 	}{
+		// Use x-www-form-urlencoded format, not json format: {"username":"david", "password":"778899"}
 		{"base case - 1", "username=david&password=778899123", "registered successfully\n"},
 		{"base case - 2", "username=david&password=my_password", "username has been taken\n"},
 		{"bad case", "", "failed to parse username and password: no username or password\n"},
