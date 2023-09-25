@@ -41,6 +41,7 @@ func (s *server) handleGreeting(w http.ResponseWriter, _ *http.Request) {
 }
 
 // middleware
+// act as a filter which only allow the logged in request to pass
 func (s *server) authenticatedOnly(f func(http.ResponseWriter, *http.Request, *sessions.Session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if user has logged in.
@@ -63,6 +64,7 @@ func (s *server) authenticatedOnly(f func(http.ResponseWriter, *http.Request, *s
 }
 
 // middleware
+// only allow POST method and has password and username parameter to pass
 func (s *server) postUsernamePasswordOnly(f func(w http.ResponseWriter, r *http.Request,
 	username, password string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
